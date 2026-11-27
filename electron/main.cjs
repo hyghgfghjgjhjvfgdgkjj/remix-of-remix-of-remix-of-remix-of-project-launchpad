@@ -48,6 +48,8 @@ ipcMain.handle("api", async (_e, p) => {
       if (!res.ok || !(res.headers.get("content-type") || "").includes("json")) continue;
       const body = await res.json();
       if (base !== s) { site = base; fs.writeFileSync(file("site.json"), JSON.stringify({ site })); }
+      // Luo/Teso rows: never replace a saved list with an empty one (Firestore quota days).
+      if (p.startsWith("uploads/") && !body.items?.length) { const c = readJson(key, null); if (c?.items?.length) return c; }
       fs.writeFileSync(file(key), JSON.stringify(body)); return body;
     } catch {}
   }

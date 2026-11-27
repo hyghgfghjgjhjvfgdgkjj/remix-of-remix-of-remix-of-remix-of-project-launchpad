@@ -54,9 +54,9 @@ export const Route = createFileRoute("/api/public/desktop/$")({
           const lang = id === "teso" ? "teso" : id === "luo" ? "luo" : "luganda";
           if (!uploadsCache || Date.now() - uploadsCache.at > 600_000) {
             const rows = await restListTitles();
-            if (rows.length || !uploadsCache) uploadsCache = { at: Date.now(), rows };
+            if (rows.length) uploadsCache = { at: Date.now(), rows };
           }
-          const items = uploadsCache.rows.filter((t) => t.language === lang && t.poster)
+          const items = (uploadsCache?.rows ?? []).filter((t) => t.language === lang && t.poster)
             .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 60)
             .map((t) => ({ id: `up-${t.id}`, title: t.title, poster: t.poster, year: t.year, genre: t.genre ?? "", vj: t.vj, type: "movie", direct: t.videoUrl, description: t.description }));
           return json({ items }, 300);

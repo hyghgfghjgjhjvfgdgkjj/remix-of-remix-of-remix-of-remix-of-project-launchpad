@@ -2,8 +2,14 @@ Unicode true
 !include "MUI2.nsh"
 Name "Movie max"
 OutFile "/tmp/desktop-release/MovieMax-Setup.exe"
-InstallDir "$LOCALAPPDATA\Programs\Movie max"
-RequestExecutionLevel user
+InstallDir "$PROGRAMFILES64\Movie max"
+RequestExecutionLevel admin
+VIProductVersion "1.0.0.0"
+VIAddVersionKey "ProductName" "Movie max"
+VIAddVersionKey "CompanyName" "Movie max"
+VIAddVersionKey "FileDescription" "Movie max Setup"
+VIAddVersionKey "FileVersion" "1.0.0"
+VIAddVersionKey "LegalCopyright" "Movie max"
 SetCompressor /SOLID lzma
 !define MUI_ICON "icon.ico"
 !define MUI_UNICON "icon.ico"
@@ -24,19 +30,21 @@ Function DeskShortcut
   CreateShortcut "$DESKTOP\Movie max.lnk" "$INSTDIR\Movie max.exe"
 FunctionEnd
 Section
+  SetShellVarContext all
   nsExec::Exec 'taskkill /F /IM "Movie max.exe"'
   SetOutPath "$INSTDIR"
   File /r "/tmp/desktop-release/Movie max-win32-x64/*"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateDirectory "$SMPROGRAMS\Movie max"
   CreateShortcut "$SMPROGRAMS\Movie max\Movie max.lnk" "$INSTDIR\Movie max.exe"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MovieMax" "DisplayName" "Movie max"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MovieMax" "UninstallString" "$INSTDIR\Uninstall.exe"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MovieMax" "DisplayIcon" "$INSTDIR\Movie max.exe"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\MovieMax" "DisplayName" "Movie max"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\MovieMax" "UninstallString" "$INSTDIR\Uninstall.exe"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\MovieMax" "DisplayIcon" "$INSTDIR\Movie max.exe"
 SectionEnd
 Section "Uninstall"
+  SetShellVarContext all
   RMDir /r "$INSTDIR"
   Delete "$DESKTOP\Movie max.lnk"
   RMDir /r "$SMPROGRAMS\Movie max"
-  DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\MovieMax"
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\MovieMax"
 SectionEnd
