@@ -6,3 +6,4 @@
 - Native LIVE links open /live-tv; web external TV links and /channels remain unchanged. Why: TV must play inside the app without replacing its navigation.
 - Native LIVE opens /live-tv full screen (no header/nav) in the Android app; the website keeps header + nav. Why: owner wants TV to fill the app.
 - InstallAppButton links the desktop setup .exe from public R2 storage, not a Lovable asset URL. Why: `/__l5e/` URLs return "No file" on the independent luofilm.site deployment.
+- The website's floating WhatsApp pop-up is replaced by AppDownloadBanner, which links to /app (Android + Windows install guides, TV coming soon) and still fires WHATSAPP_PROMPT_CLOSED_EVENT. Why: owner wants only an app download banner.
