@@ -16,7 +16,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DEFAULT_PLANS, getPlans } from "@/lib/admin";
+import { DEFAULT_PLANS, getPlans, type PlansSetting } from "@/lib/admin";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
 import {
@@ -79,11 +79,13 @@ export function SubscribeModal({
   onOpenChange,
   customPlan,
   onPaid,
+  plansOverride,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   customPlan?: CustomPayPlan;
   onPaid?: () => void;
+  plansOverride?: PlansSetting;
 }) {
   const { user, profile } = useAuth();
   const { refreshSubscription } = useSubscription();
@@ -117,7 +119,7 @@ export function SubscribeModal({
   const momo = hasMobileMoney(country.code) && (liveNets === null || liveNets.length > 0);
   const methods = METHODS.filter((m) => momo || m.id !== "mobile_money");
   const settings = useQuery({ queryKey: ["plans"], queryFn: getPlans });
-  const source = settings.data ?? DEFAULT_PLANS;
+  const source = plansOverride ?? settings.data ?? DEFAULT_PLANS;
 
   const liveTx = useRef<Row | null>(null);
   const linkTx = useRef<Row | null>(null);

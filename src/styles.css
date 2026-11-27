@@ -780,3 +780,44 @@
 }
 
 img { -webkit-user-drag: none; }
+
+/* Isolated desktop account window: same membership layout, app-owned colours. */
+.desktop-account {
+  --background: oklch(0.16 0.007 264);
+  --foreground: oklch(0.96 0.004 264);
+  --card: oklch(0.22 0.008 264);
+  --muted: oklch(0.27 0.008 264);
+  --muted-foreground: oklch(0.72 0.012 264);
+  --primary: oklch(0.78 0.14 185);
+  --primary-foreground: oklch(0.16 0.02 230);
+  --border: oklch(0.4 0.012 264);
+  --desktop-action: linear-gradient(120deg, oklch(0.82 0.14 185), oklch(0.66 0.19 250));
+  --google-background: oklch(0.19 0.002 285);
+  --google-border: oklch(0.65 0.005 150);
+  --google-foreground: oklch(0.91 0.002 110);
+  color-scheme: dark;
+}
+.desktop-account body { padding-top: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+.desktop-account [role="dialog"] {
+  background: var(--card) !important;
+  color: var(--foreground) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+}
+.desktop-account [role="dialog"] [class*="bg-"],
+.desktop-account [role="dialog"] [class*="ring-"] {
+  background: var(--muted) !important;
+  color: var(--foreground) !important;
+  --tw-ring-color: var(--border) !important;
+}
+.desktop-account [role="dialog"] button[class*="ring-2"] {
+  background: var(--accent) !important;
+  --tw-ring-color: var(--primary) !important;
+}
+.desktop-account [role="dialog"] button[type="submit"],
+.desktop-account [role="dialog"] button.subscribe-original {
+  background: var(--desktop-action) !important;
+  color: var(--primary-foreground) !important;
+}
+.desktop-account [role="dialog"] input { background: var(--background) !important; color: var(--foreground) !important; }
+.google-desktop-button { background: var(--google-background); color: var(--google-foreground); border-color: var(--google-border); font-size: 14px; font-weight: 500; }

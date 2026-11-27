@@ -3,6 +3,7 @@
 const { app, BrowserWindow, ipcMain, net, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
+const { matchDownload, downloadFilename } = require("./download-rules.cjs");
 
 const DEFAULT_SITE = "https://luofilm.site";
 const ACTIVE_SITE_DOC = "https://firestore.googleapis.com/v1/projects/luo-film-2026/databases/(default)/documents/app_settings/active_site?key=AIzaSyBTSFk7GSITIHQ9WxSdi1BoVvcr4FXuZe0";
@@ -58,53 +59,12 @@ ipcMain.handle("api", async (_e, p) => {
 });
 
 const FS = "https://firestore.googleapis.com/v1/projects/luo-film-2026/databases/(default)/documents";
-const ADMIN_EMAILS = ["mainplatform.nexus@gmail.com", "p0760734679@luofilm.site"];
+// Provider checkout and activation use the same authenticated flow as the website.
 let idToken = null;
-const fsVal = (v) => v === null || v === undefined ? { nullValue: null } : typeof v === "number" ? (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v }) : typeof v === "boolean" ? { booleanValue: v } : { stringValue: String(v) };
-async function fsWrite(coll, id, obj, update) {
-  const fields = Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, fsVal(v)]));
-  const url = update ? `${FS}/${coll}/${id}?${Object.keys(obj).map((k) => "updateMask.fieldPaths=" + k).join("&")}` : `${FS}/${coll}?documentId=${id}`;
-  const r = await net.fetch(url, { method: update ? "PATCH" : "POST", headers: { authorization: `Bearer ${idToken.token}`, "content-type": "application/json" }, body: JSON.stringify({ fields }), signal: timeout(12000) });
-  if (!r.ok) throw new Error("save failed " + r.status);
-}
-// In-app mobile money: transaction + subscription rows written with the user's own Firebase token, deposit via the site's pawaPay endpoint.
-ipcMain.handle("pay", async (_e, o) => {
-  const st = await account(); if (!st.user || !idToken) return { status: "failed", message: "Log in first" };
-  const plan = o?.plan || {}; const price = Number(plan.price); if (!(price > 0) || !plan.id) return { status: "failed", message: "Pick a plan" };
-  const id = require("node:crypto").randomUUID(); const now = new Date().toISOString();
-  const tx = { id, user_id: st.user.uid, plan_id: String(plan.id), plan_name: String(plan.name || plan.id), tier: String(o.tier || "vip"), duration_days: Number(plan.days) || 30, device_limit: Number(plan.devices) || 1, amount: price, base_amount: price, currency: "UGX", country: "UG", kind: "payment", status: "pending", method: "mobile_money", reference: `LUO-${Date.now()}-${id.slice(0, 8)}`, note: `Subscription — ${plan.name}`, source: "desktop", created_at: now };
-  try {
-    await fsWrite("luo_transactions", id, tx);
-    const s = await activeSite();
-    const r = await (await net.fetch(`${s}/api/public/desktop/pay`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ phone: o.phone, amount: price, reference: tx.reference, description: tx.note }), signal: timeout(30000) })).json();
-    if (!r.internal_reference) { await fsWrite("luo_transactions", id, { status: "failed" }, true).catch(() => {}); return { status: "failed", message: r.message || "Payment did not start" }; }
-    const phone = String(o.phone).replace(/\D/g, "");
-    await fsWrite("luo_transactions", id, { internal_reference: r.internal_reference, msisdn: phone, phone, used_at: now }, true).catch(() => {});
-    payments.set(id, { tx, dep: r.internal_reference, site: s });
-    return { status: "pending", id, message: r.message || "Approve the prompt on your phone" };
-  } catch { return { status: "failed", message: "Could not reach the payment service" }; }
-});
-const payments = new Map();
-ipcMain.handle("pay-status", async (_e, id) => {
-  const p = payments.get(id); if (!p) return { status: "failed", message: "Unknown payment" };
-  try {
-    const r = await (await net.fetch(`${p.site}/api/public/desktop/pay-status/${p.dep}`, { signal: timeout(15000) })).json();
-    if (r.status === "success" && !p.done) {
-      p.done = true; await account(); const now = new Date().toISOString();
-      const cur = readJson("sub.json", null); const base = cur?.subscribed && cur.expires && Date.parse(cur.expires) > Date.now() ? Date.parse(cur.expires) : Date.now();
-      const t = p.tx; const sid = require("node:crypto").randomUUID();
-      await fsWrite("luo_transactions", id, { status: "completed", completed_at: now }, true).catch(() => {});
-      await fsWrite("luo_subscriptions", sid, { id: sid, user_id: t.user_id, transaction_id: id, plan_id: t.plan_id, plan_name: t.plan_name, tier: t.tier, device_limit: t.device_limit, amount: t.amount, currency: "UGX", status: "active", starts_at: now, started_at: now, expires_at: new Date(base + t.duration_days * 864e5).toISOString(), source: "desktop", created_at: now });
-      notifyAccount();
-    } else if (r.status === "failed") await fsWrite("luo_transactions", id, { status: "failed" }, true).catch(() => {});
-    return r;
-  } catch { return { status: "pending", message: "Waiting for confirmation" }; }
-});
-
 const FB_KEY = "AIzaSyBTSFk7GSITIHQ9WxSdi1BoVvcr4FXuZe0";
 const READ_USER = `new Promise((ok) => { const r = indexedDB.open("firebaseLocalStorageDb"); r.onerror = () => ok(null);
   r.onsuccess = () => { try { const q = r.result.transaction("firebaseLocalStorage").objectStore("firebaseLocalStorage").getAll();
-  q.onsuccess = () => { const u = (q.result || []).map((x) => x.value).find((v) => v && v.uid && v.stsTokenManager); ok(u ? { uid: u.uid, email: u.email, name: u.displayName, photo: u.photoURL, refreshToken: u.stsTokenManager.refreshToken } : null); };
+  q.onsuccess = () => { const u = (q.result || []).map((x) => x.value).find((v) => v && v.uid && v.stsTokenManager); ok(u ? { uid: u.uid, email: u.email, name: u.displayName, photo: u.photoURL, refreshToken: u.stsTokenManager.refreshToken, firebaseUser: u } : null); };
   q.onerror = () => ok(null); } catch { ok(null); } }; })`;
 const notifyAccount = () => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send("account-changed"));
 async function account() {
@@ -118,8 +78,7 @@ async function account() {
       body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "luo_subscriptions" }], where: { fieldFilter: { field: { fieldPath: "user_id" }, op: "EQUAL", value: { stringValue: acc.uid } } } } }) })).json();
     idToken = { uid: acc.uid, token: t.id_token, at: Date.now() };
     const val = (f) => f && (f.stringValue ?? f.timestampValue ?? f.integerValue ?? f.doubleValue);
-    const em = String(acc.email || "").toLowerCase();
-    let admin = ADMIN_EMAILS.includes(em);
+    let admin = false;
     if (!admin) { try { const rr = await (await net.fetch(FS + ":runQuery", { method: "POST", headers: { authorization: `Bearer ${t.id_token}`, "content-type": "application/json" }, signal: timeout(8000),
       body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "user_roles" }], where: { fieldFilter: { field: { fieldPath: "user_id" }, op: "EQUAL", value: { stringValue: acc.uid } } } } }) })).json();
       admin = (Array.isArray(rr) ? rr : []).some((r) => ["admin", "staff"].includes(r.document?.fields?.role?.stringValue)); } catch {} }
@@ -129,7 +88,7 @@ async function account() {
       .sort((a, b) => Date.parse(b.expires || 0) - Date.parse(a.expires || 0))[0];
     const out = { user, admin, subscribed: !!live || admin, plan: live?.plan || null, expires: live?.expires || null };
     fs.writeFileSync(file("sub.json"), JSON.stringify(out)); return out;
-  } catch { const c = readJson("sub.json", null); return c && c.user?.uid === acc.uid ? { ...c, offline: true } : { user, subscribed: false }; }
+  } catch { const c = readJson("sub.json", null); return c && c.user?.uid === acc.uid ? { ...c, admin: false, subscribed: !!c.expires && Date.parse(c.expires) > Date.now(), offline: true } : { user, subscribed: false }; }
 }
 ipcMain.handle("account", () => account());
 ipcMain.handle("logout", async () => {
@@ -148,28 +107,42 @@ ipcMain.handle("email-auth", async (_e, o) => {
     if (r.error) { const k = String(r.error.message).split(" ")[0]; return { error: AUTH_ERR[k] || (k.startsWith("WEAK_PASSWORD") ? "Password must be at least 6 characters" : "Sign-in failed") }; }
     let name = r.displayName || "";
     if (o?.mode === "up" && o.name) { await call("update", { idToken: r.idToken, displayName: String(o.name).slice(0, 80) }).catch(() => {}); name = o.name; }
-    fs.writeFileSync(file("account.json"), JSON.stringify({ uid: r.localId, email: r.email, name, photo: r.profilePicture || null, refreshToken: r.refreshToken }));
+    fs.writeFileSync(file("account.json"), JSON.stringify({ uid: r.localId, email: r.email, name, photo: r.profilePicture || null, refreshToken: r.refreshToken, firebaseUser: { uid: r.localId, email: r.email, displayName: name, photoURL: r.profilePicture || null, emailVerified: false, apiKey: FB_KEY, appName: "[DEFAULT]", providerData: [{ providerId: "password", uid: r.email, email: r.email, displayName: name, photoURL: null }], stsTokenManager: { refreshToken: r.refreshToken, accessToken: r.idToken, expirationTime: Date.now() + Number(r.expiresIn || 3600) * 1000 } } }));
     notifyAccount(); return { ok: true };
   } catch { return { error: "No connection to the sign-in service" }; }
 });
 
 let login = null;
+function trustedAccountSender(e) {
+  if (!login || login.isDestroyed() || e.sender !== login.webContents) return false;
+  try { const u = new URL(e.sender.getURL()); return u.origin === site && u.pathname === "/desktop-account"; } catch { return false; }
+}
+ipcMain.handle("desktop-session", (e) => trustedAccountSender(e) ? readJson("account.json", null)?.firebaseUser || null : null);
+ipcMain.handle("desktop-ready", async (e) => {
+  if (!trustedAccountSender(e)) return;
+  const u = await e.sender.executeJavaScript(READ_USER).catch(() => null);
+  if (!u?.refreshToken) return;
+  fs.writeFileSync(file("account.json"), JSON.stringify(u));
+  await account(); notifyAccount(); login?.close();
+});
+ipcMain.on("desktop-close", (e) => { if (trustedAccountSender(e)) login?.close(); });
 ipcMain.handle("login", async (e, p) => {
   const s = await activeSite();
   const parent = BrowserWindow.fromWebContents(e.sender);
   if (!login || login.isDestroyed()) {
-    login = new BrowserWindow({ parent, modal: true, width: 460, height: 640, resizable: false, backgroundColor: "#101217", title: "Movie max account", autoHideMenuBar: true, icon: path.join(__dirname, "icon.ico") });
-    login.webContents.setWindowOpenHandler(({ url }) => /accounts\.google\.com|whop\.com|paypal\.com/.test(url) || url.startsWith(s) ? { action: "allow" } : (shell.openExternal(url), { action: "deny" }));
+    login = new BrowserWindow({ parent, modal: true, width: p === "/plans" ? 850 : 480, height: 760, resizable: true, backgroundColor: "#101217", title: "Movie max", autoHideMenuBar: true, icon: path.join(__dirname, "icon.ico"),
+      webPreferences: { preload: path.join(__dirname, "account-preload.cjs"), contextIsolation: true, nodeIntegration: false } });
+    login.webContents.setWindowOpenHandler(({ url }) => {
+      try { const u = new URL(url); if (u.protocol === "https:" && /(^|\.)(accounts.google.com|whop.com|paypal.com)$/.test(u.hostname)) return { action: "allow" }; } catch {}
+      return { action: "deny" };
+    });
   }
-  login.loadURL(s + (p === "/plans" ? "/plans" : "/profile")); login.show();
-  const w = login, poll = setInterval(async () => {
-    if (w.isDestroyed()) { clearInterval(poll); notifyAccount(); return; }
-    const u = await w.webContents.executeJavaScript(READ_USER).catch(() => null);
-    if (u?.refreshToken) { const had = readJson("account.json", null)?.uid === u.uid; fs.writeFileSync(file("account.json"), JSON.stringify(u)); if (!had) { notifyAccount(); if (p !== "/plans") { clearInterval(poll); w.close(); } } }
-  }, 1500);
+  // Only the dedicated account/checkout screen: never /profile or a website page.
+  await login.loadURL(s + "/desktop-account?action=" + (p === "/plans" ? "plans" : "google"));
+  login.show();
 });
 
-const dls = new Map(); let dlSeq = 0;
+const dls = new Map(); let dlSeq = Date.now();
 const dlInfo = () => [...dls.values()].map(({ item, last, ...d }) => ({ ...d, received: item?.getReceivedBytes() ?? d.received, total: item?.getTotalBytes() || d.total, paused: item?.isPaused() ?? false }));
 const pushDl = () => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send("dl", dlInfo()));
 ipcMain.handle("dl-start", (e, { url, name, poster }) => {
@@ -201,9 +174,9 @@ app.whenReady().then(() => require("electron").session.defaultSession.setCertifi
   cb(-3);
 }));
 app.whenReady().then(() => require("electron").session.defaultSession.on("will-download", (_e, item) => {
-  const id = pendingDl.shift(); const d = id && dls.get(id); if (!d) return;
+  const d = matchDownload(pendingDl, dls, item.getURLChain()); if (!d) return;
   const dir = path.join(app.getPath("videos"), "Movie max"); fs.mkdirSync(dir, { recursive: true });
-  d.path = path.join(dir, item.getFilename()); item.setSavePath(d.path); d.item = item; d.state = "downloading";
+  d.path = path.join(dir, downloadFilename(item.getFilename(), d.id)); item.setSavePath(d.path); d.item = item; d.state = "downloading";
   let t = 0; item.on("updated", (_ev, st) => { d.state = st === "interrupted" ? "paused" : "downloading"; const now = Date.now(); if (now - t > 700) { const b = item.getReceivedBytes(); d.speed = d.last ? Math.max(0, (b - d.last.b) / ((now - d.last.t) / 1000)) : 0; d.last = { b, t: now }; t = now; pushDl(); } });
   item.once("done", (_ev, st) => { d.received = item.getReceivedBytes(); d.total = item.getTotalBytes(); d.item = null; d.state = st === "completed" ? "done" : "failed"; pushDl(); });
 }));

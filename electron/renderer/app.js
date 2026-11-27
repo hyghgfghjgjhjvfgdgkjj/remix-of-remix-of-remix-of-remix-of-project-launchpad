@@ -9,8 +9,11 @@ const ICON = { home: "home", trending: "trending", latest: "trending", recommend
 const ic = (k) => `ic-${ICON[k] || "trending"}.png`;
 let cats = [], route = { v: "home" }, hist = [], timers = [];
 
-const card = (i) => `<div class="card" data-t="${esc(i.id)}"${i.direct ? ` data-dir="${esc(i.direct)}" data-nm="${esc(i.title)}"` : ""}><div class="p">${i.poster ? `<img loading="lazy" src="${esc(i.poster)}" alt="">` : ""}${i.rating ? `<em>★ ${esc(i.rating)}</em>` : ""}${i.vj ? `<i class="vj">VJ ${esc(i.vj)}</i>` : ""}</div><b>${esc(i.title)}</b><small>${esc([i.year, i.genre?.split(",")[0]].filter(Boolean).join(" · "))}</small></div>`;
-const cols = () => Math.max(3, Math.floor(($("#view").clientWidth - 44 + 12) / 108));
+const vjKey = (raw) => String(raw || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\bvj\b/g, " ").replace(/\s+/g, " ").trim();
+const vjName = (raw) => "VJ " + vjKey(raw).replace(/\b[a-z]/g, (c) => c.toUpperCase());
+function vjIndex(raw) { const key = vjKey(raw); if (key === "senior paul") return 0; if (key === "junior") return 1; let hash = 0; for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0; return hash % 8; }
+const card = (i) => `<div class="card" data-t="${esc(i.id)}"${i.direct ? ` data-dir="${esc(i.direct)}" data-nm="${esc(i.title)}"` : ""}><div class="p">${i.poster ? `<img loading="lazy" src="${esc(i.poster)}" alt="">` : ""}${i.rating ? `<em>★ ${esc(i.rating)}</em>` : ""}${i.vj ? `<i class="vj vj-${vjIndex(i.vj)}">${esc(vjName(i.vj))}</i>` : ""}</div><b>${esc(i.title)}</b><small>${esc([i.year, i.genre?.split(",")[0]].filter(Boolean).join(" · "))}</small></div>`;
+const cols = () => Math.max(3, Math.floor(($("#view").clientWidth - 44 + 12) / 140));
 const rows2 = (list) => `<div class="grid">${list.slice(0, cols() * 2).map(card).join("")}</div>`;
 const gridSk = (n) => `<div class="grid">${Array.from({ length: n }, () => `<div><div class="p sk" style="aspect-ratio:2/3;border-radius:9px"></div><div class="skt sk"></div></div>`).join("")}</div>`;
 const skeleton = () => `<div class="hero"><div class="slide sk"></div><div class="slide sk"></div></div><div class="tiles">${"<div class='tile sk' style='height:60px'></div>".repeat(6)}</div><h3><span class="sk" style="width:140px;height:14px;border-radius:6px"></span></h3>${gridSk(cols() * 2)}`;
@@ -241,7 +244,7 @@ function loginFloat(mode = "in") {
   <small class="err"></small>
   <button class="pri" type="submit">${mode === "in" ? "Log in" : "Sign up"}</button>
   <div class="or"><span>or</span></div>
-  <button class="sec gg" type="button" data-a="google"><b>G</b> Continue with Google</button>
+  <button class="sec gg" type="button" data-a="google"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"/><path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/></svg> Continue with Google</button>
   <button class="lnk" type="button" data-a="swap">${mode === "in" ? "New here? Create an account" : "Have an account? Log in"}</button>
   ${mode === "in" ? `<button class="lnk" type="button" data-a="reset">Forgot password?</button>` : ""}</form>`;
   const f = m.querySelector("form"), err = m.querySelector(".err");
@@ -260,29 +263,5 @@ function loginFloat(mode = "in") {
 }
 api.onClock?.(() => toast("Your computer's date and time look wrong. Movie max still works, but please fix the clock in Windows settings."));
 
-// In-app plans and mobile money checkout (no website).
-const ugx = (n) => "UGX " + Number(n).toLocaleString();
-async function plansFloat() {
-  const m = document.createElement("div"); m.className = "modal";
-  m.innerHTML = `<div class="acc pl"><h2>Choose a plan</h2><p>Loading plans…</p></div>`; document.body.append(m);
-  const d = await api.api("plans"); const P = d.plans || { vip: [], svip: [] };
-  const list = [...(P.vip || []).map((x) => ({ ...x, tier: "vip" })), ...(P.svip || []).map((x) => ({ ...x, tier: "svip" }))];
-  let pick = list.find((x) => x.id === "monthly") || list[0];
-  const paint = () => { m.innerHTML = `<form class="acc pl"><h2>Go Premium</h2><p>Pay with mobile money · MTN or Airtel</p>
-    <div class="plg">${list.map((x, n) => `<button type="button" class="pli ${x === pick ? "on" : ""} ${x.tier}" data-p="${n}"><small>${x.tier === "svip" ? "SVIP" : "VIP"}</small><b>${esc(x.name)}</b><strong>${ugx(x.price)}</strong><i>${esc(x.note || x.days + " days")}</i></button>`).join("")}</div>
-    <input name="phone" required inputmode="tel" placeholder="Mobile money number e.g. 0772 123456" autocomplete="tel">
-    <small class="err"></small><button class="pri" type="submit">Pay ${pick ? ugx(pick.price) : ""}</button><button class="sec" type="button" data-a="close">Cancel</button></form>`;
-    const f = m.querySelector("form"), err = m.querySelector(".err");
-    f.onclick = (e) => { const b = e.target.closest("[data-p]"); if (b) { const ph = f.phone.value; pick = list[+b.dataset.p]; paint(); m.querySelector("input").value = ph; } if (e.target.dataset.a) m.remove(); };
-    f.onsubmit = async (e) => { e.preventDefault(); const b = f.querySelector(".pri"); b.disabled = true; b.textContent = "Starting payment…"; err.textContent = "";
-      const r = await api.pay({ plan: pick, tier: pick.tier, phone: f.phone.value.trim() });
-      if (r.status !== "pending") { b.disabled = false; b.textContent = "Pay " + ugx(pick.price); err.textContent = r.message || "Payment failed"; return; }
-      m.innerHTML = `<div class="acc pl"><img src="ic-mascot.png" alt=""><h2>Approve on your phone</h2><p>Enter your mobile money PIN to pay ${ugx(pick.price)} for ${esc(pick.name)}.</p><small class="err">Waiting for confirmation…</small><button class="sec" data-a="close">Close</button></div>`;
-      m.querySelector("[data-a]").onclick = () => m.remove();
-      for (let i = 0; i < 60 && m.isConnected; i++) { await new Promise((ok) => setTimeout(ok, 5000));
-        const s = await api.payStatus(r.id);
-        if (s.status === "success") { await loadAcc(); m.remove(); toast("Payment received · subscription active"); return; }
-        if (s.status === "failed") { m.querySelector(".err").textContent = s.message || "Payment failed"; return; } } };
-  };
-  paint();
-}
+// Dedicated desktop-themed checkout reuses Firebase plans and every live website method.
+function plansFloat() { return api.plans ? api.plans() : api.login("/plans"); }

@@ -116,3 +116,11 @@
 - [x] Build signed 1.0.2 update; mobile website and native widget layout captured.
 - [ ] Verify native notification actions, downloads/network recovery, widget placement and signed-in membership on a real phone (software emulator stalls; no authenticated Firebase user).
 - [x] Verify desktop subscriptions, watch and detail pages (API checked; real Windows test pending)
+
+## Desktop subscription and branding update
+- [x] Match Firebase plans and all website payment methods in an isolated desktop-themed checkout; unavailable prices show retry, not invented defaults.
+- [x] Direct Google sign-in, account verification and return to desktop implemented.
+- [x] Concurrent downloads with independent files; match website VJ badges; remove web referral banner. Download regression tests pass.
+- [x] Generate a flat, clean blue/violet desktop logo icon (no green, 3D or glass; repaired missing centre), rebuild and upload setup 2.4.0.
+- [ ] Verify checkout and Google sign-in with a real Firebase account/payment and Windows installation (blocked: no user credentials, real payment approval or Windows computer; Google may restrict Electron). Account screen isolation verified in browser.
+- [ ] Remove Windows reputation warning (blocked: no trusted code-signing certificate; installer remains unsigned).

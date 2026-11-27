@@ -4,18 +4,6 @@ import { CATEGORIES, isAdultItem } from "@/lib/categories";
 import { restListTitles } from "@/lib/luo-rest";
 import { fsWhere } from "@/lib/developer-api";
 
-const DESKTOP_PLANS = {
-  vip: [
-    { id: "daily", name: "Daily pass", price: 1000, days: 1, note: "HD 720p · 1 device", devices: 1 },
-    { id: "weekly", name: "Weekly", price: 5000, days: 7, note: "Full HD · 2 devices", devices: 2 },
-    { id: "monthly", name: "Monthly", price: 15000, days: 30, note: "Full HD · 4 devices", devices: 4 },
-  ],
-  svip: [
-    { id: "s-monthly", name: "Monthly Premium", price: 25000, days: 30, note: "4K · 4 devices", devices: 4 },
-    { id: "s-quarterly", name: "Quarterly Premium", price: 60000, days: 90, note: "4K · downloads", devices: 4 },
-    { id: "s-yearly", name: "Yearly Premium", price: 180000, days: 365, note: "4K · TV app · no ads", devices: 5 },
-  ],
-};
 let uploadsCache: { at: number; rows: Awaited<ReturnType<typeof restListTitles>> } | null = null;
 let plansCache: { at: number; v: unknown } | null = null;
 
@@ -30,17 +18,7 @@ const nb = async (p: string) => {
 };
 
 export const Route = createFileRoute("/api/public/desktop/$")({
-  server: { handlers: { POST: async ({ request, params }) => {
-    if (params._splat !== "pay") return json({ error: "Not found" }, 0);
-    try {
-      const b = (await request.json()) as { phone?: string; amount?: number; reference?: string; description?: string };
-      const phone = String(b.phone ?? "").replace(/\D/g, "").slice(0, 15);
-      const amount = Number(b.amount);
-      if (phone.length < 9 || !(amount > 0) || !/^LUO-[\w-]{6,80}$/.test(String(b.reference))) return json({ status: "failed", message: "Check the phone number" }, 0);
-      const { startDeposit } = await import("@/lib/pawapay.server");
-      return json(await startDeposit({ phone: phone.startsWith("0") ? "256" + phone.slice(1) : phone, amount, currency: "UGX", reference: String(b.reference), description: String(b.description ?? "Subscription").slice(0, 60) }), 0);
-    } catch (e) { return json({ status: "failed", message: e instanceof Error ? e.message : "Payment failed" }, 0); }
-  }, GET: async ({ request, params }) => {
+  server: { handlers: { GET: async ({ request, params }) => {
     const url = new URL(request.url); const q = url.searchParams;
     const [action, id] = (params._splat ?? "").split("/");
     try {
@@ -64,14 +42,10 @@ export const Route = createFileRoute("/api/public/desktop/$")({
         case "plans": {
           if (!plansCache || Date.now() - plansCache.at > 600_000) {
             const row = await fsWhere("app_settings", "key", "plans").then((r) => r[0]).catch(() => null);
-            plansCache = { at: Date.now(), v: (row?.["value"] as unknown) ?? DESKTOP_PLANS };
+            if (!row?.["value"]) return Response.json({ error: "Prices temporarily unavailable" }, { status: 503, headers: cors });
+            plansCache = { at: Date.now(), v: row["value"] };
           }
           return json({ plans: plansCache.v }, 300);
-        }
-        case "pay-status": {
-          if (!/^[0-9a-f-]{36}$/i.test(id ?? "")) return json({ status: "failed", message: "Bad id" }, 0);
-          const { depositStatus } = await import("@/lib/pawapay.server");
-          return json(await depositStatus(id!), 0);
         }
         case "category": {
           if (id === "trending") { const items = (await fetchMostTrending()).filter((i) => i.poster && !isAdultItem(i)); if (items.length && (Number(q.get("page")) || 1) === 1) return json({ items }, 300); }

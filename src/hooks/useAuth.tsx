@@ -90,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Site-wide Google One Tap prompt for signed-out visitors.
   useEffect(() => {
-    if (loading || user) return;
+    if (loading || user || window.location.pathname === '/desktop-account') return;
     let stop: (() => void) | undefined;
     let cancelled = false;
     const timer = setTimeout(() => {

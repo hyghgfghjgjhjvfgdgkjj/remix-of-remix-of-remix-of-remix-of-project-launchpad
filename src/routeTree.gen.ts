@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ChannelsRouteImport } from './routes/channels'
+import { Route as DesktopAccountRouteImport } from './routes/desktop-account'
 import { Route as DeveloperRouteImport } from './routes/developer'
 import { Route as DocRouteImport } from './routes/doc'
 import { Route as DocDotmdRouteImport } from './routes/doc[.]md'
@@ -74,6 +75,11 @@ const AdminRoute = AdminRouteImport.update({
 const ChannelsRoute = ChannelsRouteImport.update({
   id: '/channels',
   path: '/channels',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DesktopAccountRoute = DesktopAccountRouteImport.update({
+  id: '/desktop-account',
+  path: '/desktop-account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DeveloperRoute = DeveloperRouteImport.update({
@@ -322,6 +328,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/channels': typeof ChannelsRoute
+  '/desktop-account': typeof DesktopAccountRoute
   '/developer': typeof DeveloperRoute
   '/doc': typeof DocRouteWithChildren
   '/doc.md': typeof DocDotmdRoute
@@ -375,6 +382,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/channels': typeof ChannelsRoute
+  '/desktop-account': typeof DesktopAccountRoute
   '/developer': typeof DeveloperRoute
   '/doc.md': typeof DocDotmdRoute
   '/downloads': typeof DownloadsRoute
@@ -428,6 +436,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/channels': typeof ChannelsRoute
+  '/desktop-account': typeof DesktopAccountRoute
   '/developer': typeof DeveloperRoute
   '/doc': typeof DocRouteWithChildren
   '/doc.md': typeof DocDotmdRoute
@@ -483,6 +492,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/channels'
+    | '/desktop-account'
     | '/developer'
     | '/doc'
     | '/doc.md'
@@ -536,6 +546,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/channels'
+    | '/desktop-account'
     | '/developer'
     | '/doc.md'
     | '/downloads'
@@ -588,6 +599,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/channels'
+    | '/desktop-account'
     | '/developer'
     | '/doc'
     | '/doc.md'
@@ -642,6 +654,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   ChannelsRoute: typeof ChannelsRoute
+  DesktopAccountRoute: typeof DesktopAccountRoute
   DeveloperRoute: typeof DeveloperRoute
   DocRoute: typeof DocRouteWithChildren
   DocDotmdRoute: typeof DocDotmdRoute
@@ -711,6 +724,13 @@ declare module '@tanstack/react-router' {
       path: '/channels'
       fullPath: '/channels'
       preLoaderRoute: typeof ChannelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/desktop-account': {
+      id: '/desktop-account'
+      path: '/desktop-account'
+      fullPath: '/desktop-account'
+      preLoaderRoute: typeof DesktopAccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/developer': {
@@ -1068,6 +1088,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   ChannelsRoute: ChannelsRoute,
+  DesktopAccountRoute: DesktopAccountRoute,
   DeveloperRoute: DeveloperRoute,
   DocRoute: DocRouteWithChildren,
   DocDotmdRoute: DocDotmdRoute,

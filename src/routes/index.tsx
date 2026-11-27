@@ -8,7 +8,6 @@ import { MobileNav } from "@/components/youku/MobileNav";
 import { Rail } from "@/components/youku/Rail";
 import { RowSkeleton } from "@/components/youku/Skeletons";
 import { VjRail } from "@/components/youku/VjRail";
-import { ReferralBanner } from "@/components/youku/ReferralBanner";
 import { InAppPromos } from "@/components/youku/InAppPromos";
 import { isAdultItem } from "@/lib/categories";
 import { LatestUploads } from "@/components/luo/LatestUploads";
@@ -308,7 +307,6 @@ function HomePage() {
         </main>
 
       </div>
-      <ReferralBanner />
       <MobileNav />
     </div>
   );

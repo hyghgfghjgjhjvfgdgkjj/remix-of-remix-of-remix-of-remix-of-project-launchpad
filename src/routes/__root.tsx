@@ -8,6 +8,7 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  useRouterState,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
@@ -124,7 +125,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700&display=swap",
       },
-      { rel: "icon", href: "/favicon.ico", sizes: "48x48" },
       { rel: "icon", href: "/favicon-192.png", type: "image/png", sizes: "192x192" },
       { rel: "icon", href: "/favicon.png", type: "image/png" },
       { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
@@ -161,12 +161,15 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const desktopAccount = useRouterState({ select: (state) => state.location.pathname === '/desktop-account' });
 
   useEffect(() => {
     void registerDownloadWorker().catch(() => {});
     consumeSessionHandoff();
     if (isNativeApp()) document.documentElement.classList.add("native-app");
   }, []);
+
+  if (desktopAccount) return <QueryClientProvider client={queryClient}><AuthProvider><SubscriptionProvider><Outlet /><CardPaymentWatcher /></SubscriptionProvider></AuthProvider><Toaster position="top-center" richColors /></QueryClientProvider>;
 
   return (
     <QueryClientProvider client={queryClient}>
