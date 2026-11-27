@@ -58,7 +58,8 @@ type InstallPrompt = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
-import desktopSetup from "@/assets/MovieMax-Setup.exe.asset.json";
+// Public R2 file: Lovable asset URLs do not exist on independent deployments.
+const desktopSetup = { url: "https://pub-12f7d967af73467f908bdcc926df41e7.r2.dev/media/admin/0071c806-ab28-4e8a-b13b-2c23d0bd6ba2-MovieMax-Setup.exe" };
 
 function desktopMode(): "windows" | "electron" | null {
   const ua = navigator.userAgent;

@@ -5,3 +5,4 @@
 - Native search uses AppTopBar's input and submits to /search, whose secondary form is web-only; keep the profile link beside that input. Why: the app must have one search field, not a second search screen to type into.
 - Native LIVE links open /live-tv; web external TV links and /channels remain unchanged. Why: TV must play inside the app without replacing its navigation.
 - Native LIVE opens /live-tv full screen (no header/nav) in the Android app; the website keeps header + nav. Why: owner wants TV to fill the app.
+- InstallAppButton links the desktop setup .exe from public R2 storage, not a Lovable asset URL. Why: `/__l5e/` URLs return "No file" on the independent luofilm.site deployment.
