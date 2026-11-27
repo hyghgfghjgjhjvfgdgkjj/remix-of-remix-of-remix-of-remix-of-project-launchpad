@@ -9,7 +9,7 @@ const ICON = { home: "home", trending: "trending", latest: "trending", recommend
 const ic = (k) => `ic-${ICON[k] || "trending"}.png`;
 let cats = [], route = { v: "home" }, hist = [], timers = [];
 
-const card = (i) => `<div class="card" data-t="${esc(i.id)}"><div class="p">${i.poster ? `<img loading="lazy" src="${esc(i.poster)}" alt="">` : ""}${i.rating ? `<em>★ ${esc(i.rating)}</em>` : ""}</div><b>${esc(i.title)}</b><small>${esc([i.year, i.genre?.split(",")[0]].filter(Boolean).join(" · "))}</small></div>`;
+const card = (i) => `<div class="card" data-t="${esc(i.id)}"><div class="p">${i.poster ? `<img loading="lazy" src="${esc(i.poster)}" alt="">` : ""}${i.rating ? `<em>★ ${esc(i.rating)}</em>` : ""}${i.vj ? `<i class="vj">VJ ${esc(i.vj)}</i>` : ""}</div><b>${esc(i.title)}</b><small>${esc([i.year, i.genre?.split(",")[0]].filter(Boolean).join(" · "))}</small></div>`;
 const cols = () => Math.max(3, Math.floor(($("#view").clientWidth - 44 + 12) / 108));
 const rows2 = (list) => `<div class="grid">${list.slice(0, cols() * 2).map(card).join("")}</div>`;
 const gridSk = (n) => `<div class="grid">${Array.from({ length: n }, () => `<div><div class="p sk" style="aspect-ratio:2/3;border-radius:9px"></div><div class="skt sk"></div></div>`).join("")}</div>`;
@@ -189,7 +189,7 @@ function account(which) {
   <ul><li>Full HD movies and series</li><li>Latest Luganda translations</li><li>Downloads to your computer</li></ul>
   <button class="pri" data-a="${which === "plans" ? "plans" : "login"}">${which === "plans" ? "See plans" : "Log in / Sign up"}</button>${which === "plans" && u ? `<button class="sec" data-a="refresh">I've paid · refresh</button>` : ""}<button class="sec" data-a="close">Not now</button></div>`;
   m.onclick = async (e) => { const a = e.target.dataset.a;
-    if (a === "login") api.login("/profile"); if (a === "plans") api.login("/plans");
+    if (a === "login") return (m.remove(), loginFloat()); if (a === "plans") api.login("/plans");
     if (a === "logout") { await api.logout?.(); acc = { user: null, subscribed: false }; paintMe(); }
     if (a === "refresh") { e.target.textContent = "Checking…"; await loadAcc(); toast(acc.subscribed ? "Subscription active" : "No active subscription yet"); }
     if (a || e.target === m) m.remove(); };
@@ -198,14 +198,6 @@ function account(which) {
 
 document.addEventListener("click", (e) => { const b = e.target.closest("[data-d]"); if (b) api.dlAct(+b.dataset.id, b.dataset.d); });
 
-function account(which) {
-  const m = document.createElement("div"); m.className = "modal";
-  m.innerHTML = `<div class="acc"><img src="ic-mascot.png" alt=""><h2>${which === "plans" ? "Go Premium" : "Welcome to Movie max"}</h2><p>${which === "plans" ? "Unlock every movie, series and Luganda title." : "Log in to sync your plan, likes and history."}</p>
-  <ul><li>Full HD movies and series</li><li>Latest Luganda translations</li><li>Live TV channels</li></ul>
-  <button class="pri" data-a="login">${which === "plans" ? "See plans" : "Log in / Sign up"}</button><button class="sec" data-a="close">Not now</button></div>`;
-  m.onclick = (e) => { const a = e.target.dataset.a; if (a === "login") api.login(which === "plans" ? "/plans" : "/profile"); if (a || e.target === m) m.remove(); };
-  document.body.append(m);
-}
 
 document.addEventListener("click", (e) => {
   const sea = e.target.closest("[data-sea]");
@@ -230,3 +222,33 @@ nav(); render(); loadAcc();
 // Images and icons cannot be dragged out, copied or saved.
 document.addEventListener("dragstart", (e) => { if (e.target instanceof HTMLImageElement) e.preventDefault(); });
 document.addEventListener("contextmenu", (e) => { if (!(e.target instanceof HTMLInputElement)) e.preventDefault(); });
+
+// In-app sign-in float (Firebase email accounts; Google opens the account window).
+function loginFloat(mode = "in") {
+  const m = document.createElement("div"); m.className = "modal";
+  m.innerHTML = `<form class="acc lg"><img src="logo.png" alt=""><h2>${mode === "in" ? "Log in to Movie max" : "Create your account"}</h2>
+  <p>${mode === "in" ? "Use your Movie max email and password." : "Sign up with your email."}</p>
+  ${mode === "up" ? `<input name="name" placeholder="Your name" autocomplete="name">` : ""}
+  <input name="email" type="email" required placeholder="Email address" autocomplete="email">
+  <input name="password" type="password" required minlength="6" placeholder="Password" autocomplete="current-password">
+  <small class="err"></small>
+  <button class="pri" type="submit">${mode === "in" ? "Log in" : "Sign up"}</button>
+  <div class="or"><span>or</span></div>
+  <button class="sec gg" type="button" data-a="google"><b>G</b> Continue with Google</button>
+  <button class="lnk" type="button" data-a="swap">${mode === "in" ? "New here? Create an account" : "Have an account? Log in"}</button>
+  ${mode === "in" ? `<button class="lnk" type="button" data-a="reset">Forgot password?</button>` : ""}</form>`;
+  const f = m.querySelector("form"), err = m.querySelector(".err");
+  m.onclick = async (e) => { const a = e.target.closest("[data-a]")?.dataset.a;
+    if (e.target === m) m.remove();
+    if (a === "google") { m.remove(); api.login("/profile"); }
+    if (a === "swap") { m.remove(); loginFloat(mode === "in" ? "up" : "in"); }
+    if (a === "reset") { const em = f.email.value.trim(); if (!em) { err.textContent = "Type your email first"; return; }
+      const r = await api.emailAuth({ mode: "reset", email: em }); err.textContent = r.error || "Reset link sent to your email"; } };
+  f.onsubmit = async (e) => { e.preventDefault(); const b = f.querySelector(".pri"); b.disabled = true; b.textContent = "Please wait…"; err.textContent = "";
+    const r = await api.emailAuth({ mode, email: f.email.value.trim(), password: f.password.value, name: f.name?.value?.trim() });
+    b.disabled = false; b.textContent = mode === "in" ? "Log in" : "Sign up";
+    if (r.error) { err.textContent = r.error; return; }
+    m.remove(); await loadAcc(); toast("Logged in as " + (acc.user?.name || acc.user?.email || "you")); };
+  document.body.append(m); f.email.focus();
+}
+api.onClock?.(() => toast("Your computer's date and time look wrong. Movie max still works, but please fix the clock in Windows settings."));

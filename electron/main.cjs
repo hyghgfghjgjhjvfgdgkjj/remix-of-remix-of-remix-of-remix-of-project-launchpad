@@ -65,10 +65,10 @@ async function account() {
   const acc = readJson("account.json", null); if (!acc?.refreshToken) return { user: null };
   const user = { uid: acc.uid, email: acc.email, name: acc.name, photo: acc.photo };
   try {
-    const t = await (await fetch(`https://securetoken.googleapis.com/v1/token?key=${FB_KEY}`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(acc.refreshToken)}`, signal: timeout(10000) })).json();
+    const t = await (await net.fetch(`https://securetoken.googleapis.com/v1/token?key=${FB_KEY}`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(acc.refreshToken)}`, signal: timeout(10000) })).json();
     if (!t.id_token) { if (t.error) { fs.rmSync(file("account.json"), { force: true }); return { user: null }; } throw 0; }
     if (t.refresh_token && t.refresh_token !== acc.refreshToken) fs.writeFileSync(file("account.json"), JSON.stringify({ ...acc, refreshToken: t.refresh_token }));
-    const rows = await (await fetch("https://firestore.googleapis.com/v1/projects/luo-film-2026/databases/(default)/documents:runQuery", { method: "POST", headers: { authorization: `Bearer ${t.id_token}`, "content-type": "application/json" }, signal: timeout(10000),
+    const rows = await (await net.fetch("https://firestore.googleapis.com/v1/projects/luo-film-2026/databases/(default)/documents:runQuery", { method: "POST", headers: { authorization: `Bearer ${t.id_token}`, "content-type": "application/json" }, signal: timeout(10000),
       body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "luo_subscriptions" }], where: { fieldFilter: { field: { fieldPath: "user_id" }, op: "EQUAL", value: { stringValue: acc.uid } } } } }) })).json();
     const val = (f) => f && (f.stringValue ?? f.timestampValue ?? f.integerValue ?? f.doubleValue);
     const live = (Array.isArray(rows) ? rows : []).map((r) => r.document?.fields).filter(Boolean)
@@ -84,6 +84,21 @@ ipcMain.handle("logout", async () => {
   fs.rmSync(file("account.json"), { force: true }); fs.rmSync(file("sub.json"), { force: true });
   const s = await activeSite(); const w = new BrowserWindow({ show: false });
   await w.loadURL(s + "/profile").catch(() => {}); await w.webContents.executeJavaScript(`indexedDB.deleteDatabase("firebaseLocalStorageDb")`).catch(() => {}); w.destroy();
+});
+
+const AUTH_ERR = { EMAIL_NOT_FOUND: "No account with that email", INVALID_PASSWORD: "Wrong password", INVALID_LOGIN_CREDENTIALS: "Wrong email or password", EMAIL_EXISTS: "That email already has an account", USER_DISABLED: "This account is disabled", TOO_MANY_ATTEMPTS_TRY_LATER: "Too many tries, wait a moment" };
+ipcMain.handle("email-auth", async (_e, o) => {
+  const email = String(o?.email || "").slice(0, 200), password = String(o?.password || "").slice(0, 200);
+  const call = async (ep, body) => (await net.fetch(`https://identitytoolkit.googleapis.com/v1/accounts:${ep}?key=${FB_KEY}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: timeout(15000) })).json();
+  try {
+    if (o?.mode === "reset") { const r = await call("sendOobCode", { requestType: "PASSWORD_RESET", email }); return r.error ? { error: AUTH_ERR[r.error.message] || "Could not send reset email" } : { ok: true }; }
+    const r = await call(o?.mode === "up" ? "signUp" : "signInWithPassword", { email, password, returnSecureToken: true });
+    if (r.error) { const k = String(r.error.message).split(" ")[0]; return { error: AUTH_ERR[k] || (k.startsWith("WEAK_PASSWORD") ? "Password must be at least 6 characters" : "Sign-in failed") }; }
+    let name = r.displayName || "";
+    if (o?.mode === "up" && o.name) { await call("update", { idToken: r.idToken, displayName: String(o.name).slice(0, 80) }).catch(() => {}); name = o.name; }
+    fs.writeFileSync(file("account.json"), JSON.stringify({ uid: r.localId, email: r.email, name, photo: r.profilePicture || null, refreshToken: r.refreshToken }));
+    notifyAccount(); return { ok: true };
+  } catch { return { error: "No connection to the sign-in service" }; }
 });
 
 let login = null;
@@ -119,6 +134,16 @@ ipcMain.handle("dl-act", (_e, { id, a }) => {
   else if (a === "remove") dls.delete(id);
   pushDl();
 });
+// A wrong PC clock makes valid certificates look expired; accept only that error, only for our own services, and tell the user once.
+const OUR_HOSTS = /(^|\.)(luofilm\.site|googleapis\.com|aoneroom\.com|r2\.dev|workers\.dev|deno\.dev|netlify\.app)$/;
+let clockWarned = false;
+app.whenReady().then(() => require("electron").session.defaultSession.setCertificateVerifyProc((req, cb) => {
+  if (req.verificationResult === "net::ERR_CERT_DATE_INVALID" && OUR_HOSTS.test(req.hostname)) {
+    if (!clockWarned) { clockWarned = true; setTimeout(() => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send("clock-wrong")), 1500); }
+    return cb(0);
+  }
+  cb(-3);
+}));
 app.whenReady().then(() => require("electron").session.defaultSession.on("will-download", (_e, item) => {
   const id = pendingDl.shift(); const d = id && dls.get(id); if (!d) return;
   const dir = path.join(app.getPath("videos"), "Movie max"); fs.mkdirSync(dir, { recursive: true });
