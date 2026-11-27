@@ -226,3 +226,7 @@ let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() 
 
 cats = [{ slug: "trending", label: "Trending", icon: "trending" }, { slug: "latest", label: "Latest" }, { slug: "animation", label: "Animation" }, { slug: "love-story", label: "Romance" }, { slug: "old-skull", label: "Classics" }];
 nav(); render(); loadAcc();
+
+// Images and icons cannot be dragged out, copied or saved.
+document.addEventListener("dragstart", (e) => { if (e.target instanceof HTMLImageElement) e.preventDefault(); });
+document.addEventListener("contextmenu", (e) => { if (!(e.target instanceof HTMLInputElement)) e.preventDefault(); });

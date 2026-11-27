@@ -1,6 +1,6 @@
 // Movie max desktop: standalone app UI (renderer/) with its own frameless window.
 // Data comes from the active MovieMax domain (Firebase), cached for offline start.
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, net, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -14,7 +14,7 @@ let site = null;
 async function activeSite() {
   if (site) return site;
   try {
-    const doc = await (await fetch(ACTIVE_SITE_DOC, { signal: timeout(4000) })).json();
+    const doc = await (await net.fetch(ACTIVE_SITE_DOC, { signal: timeout(4000) })).json();
     const u = new URL(doc.fields.value.stringValue);
     if (u.protocol === "https:") { site = u.origin; fs.writeFileSync(file("site.json"), JSON.stringify({ site })); return site; }
   } catch {}
@@ -41,10 +41,16 @@ ipcMain.handle("api", async (_e, p) => {
   if (typeof p !== "string" || !/^[\w\-/?=&%.]+$/.test(p)) return { error: "bad" };
   const s = await activeSite();
   const key = "c-" + p.replace(/[^\w]/g, "_").slice(0, 120) + ".json";
-  try {
-    const res = await fetch(`${s}/api/public/desktop/${p}`, { signal: timeout(25000) });
-    if (res.ok) { const body = await res.json(); fs.writeFileSync(file(key), JSON.stringify(body)); return body; }
-  } catch {}
+  // Try the active site, then the built-in domain, using Chromium's network stack (system proxy/certs).
+  for (const base of [...new Set([s, DEFAULT_SITE, "https://www.luofilm.site"])]) {
+    try {
+      const res = await net.fetch(`${base}/api/public/desktop/${p}`, { signal: timeout(25000) });
+      if (!res.ok || !(res.headers.get("content-type") || "").includes("json")) continue;
+      const body = await res.json();
+      if (base !== s) { site = base; fs.writeFileSync(file("site.json"), JSON.stringify({ site })); }
+      fs.writeFileSync(file(key), JSON.stringify(body)); return body;
+    } catch {}
+  }
   const c = readJson(key, null);
   return c ? { ...c, offline: true } : { offline: true };
 });

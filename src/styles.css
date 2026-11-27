@@ -778,3 +778,5 @@
 @utility promo-arcs {
   background-image: repeating-radial-gradient(circle at 110% 120%, transparent 0 14px, color-mix(in oklab, var(--whatsapp-foreground) 10%, transparent) 14px 15px);
 }
+
+img { -webkit-user-drag: none; }
