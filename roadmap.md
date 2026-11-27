@@ -115,3 +115,4 @@
 - [x] Background latest notifications, download actions and network recovery, compact downloads, offline icon, update presentation, home-screen widget implemented in signed 1.0.2.
 - [x] Build signed 1.0.2 update; mobile website and native widget layout captured.
 - [ ] Verify native notification actions, downloads/network recovery, widget placement and signed-in membership on a real phone (software emulator stalls; no authenticated Firebase user).
+- [x] Verify desktop subscriptions, watch and detail pages (API checked; real Windows test pending)

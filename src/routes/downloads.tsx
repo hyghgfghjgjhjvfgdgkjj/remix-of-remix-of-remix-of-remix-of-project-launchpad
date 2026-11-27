@@ -4,6 +4,7 @@ import { Bell, CheckCircle2, Download, FolderDown, LayoutGrid, Pause, Play, Rota
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { MobileNav } from "@/components/youku/MobileNav";
+import { desktopMode, desktopSetup } from "@/components/youku/InstallAppButton";
 import { isNativeApp, nativeBridge, nativeDownloads, type NativeDownload } from "@/lib/native-app";
 
 export const Route = createFileRoute("/downloads")({
@@ -54,6 +55,8 @@ function DownloadsPage() {
   const [items, setItems] = useState<NativeDownload[] | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [alertsOn, setAlertsOn] = useState(true);
+  const [onDesktop, setOnDesktop] = useState(false);
+  useEffect(() => setOnDesktop(desktopMode() === "windows"), []);
 
   useEffect(() => {
     setNative(isNativeApp());
@@ -123,8 +126,8 @@ function DownloadsPage() {
           <div className="mt-16 text-center">
             <Download className="mx-auto size-12 text-muted-foreground" />
             <p className="mt-3 font-semibold text-foreground">Downloads live in the Movie max app</p>
-            <p className="mt-1 text-sm text-muted-foreground">Install the Android app to save movies and watch them offline.</p>
-            <a href="/downloads/MovieMax.apk" className="app-gradient mt-5 inline-flex h-11 items-center gap-2 rounded-xl px-6 font-bold text-app-accent-foreground">
+            <p className="mt-1 text-sm text-muted-foreground">{onDesktop ? "Install the Windows desktop app to save movies and watch them offline." : "Install the Android app to save movies and watch them offline."}</p>
+            <a href={onDesktop ? desktopSetup.url : "/downloads/MovieMax.apk"} download={onDesktop ? "MovieMax-Setup.exe" : "MovieMax.apk"} className="app-gradient mt-5 inline-flex h-11 items-center gap-2 rounded-xl px-6 font-bold text-app-accent-foreground">
               <Download className="size-5" /> Get the app
             </a>
           </div>

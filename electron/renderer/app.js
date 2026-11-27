@@ -9,7 +9,7 @@ const ICON = { home: "home", trending: "trending", latest: "trending", recommend
 const ic = (k) => `ic-${ICON[k] || "trending"}.png`;
 let cats = [], route = { v: "home" }, hist = [], timers = [];
 
-const card = (i) => `<div class="card" data-t="${esc(i.id)}"><div class="p">${i.poster ? `<img loading="lazy" src="${esc(i.poster)}" alt="">` : ""}${i.rating ? `<em>★ ${esc(i.rating)}</em>` : ""}${i.vj ? `<i class="vj">VJ ${esc(i.vj)}</i>` : ""}</div><b>${esc(i.title)}</b><small>${esc([i.year, i.genre?.split(",")[0]].filter(Boolean).join(" · "))}</small></div>`;
+const card = (i) => `<div class="card" data-t="${esc(i.id)}"${i.direct ? ` data-dir="${esc(i.direct)}" data-nm="${esc(i.title)}"` : ""}><div class="p">${i.poster ? `<img loading="lazy" src="${esc(i.poster)}" alt="">` : ""}${i.rating ? `<em>★ ${esc(i.rating)}</em>` : ""}${i.vj ? `<i class="vj">VJ ${esc(i.vj)}</i>` : ""}</div><b>${esc(i.title)}</b><small>${esc([i.year, i.genre?.split(",")[0]].filter(Boolean).join(" · "))}</small></div>`;
 const cols = () => Math.max(3, Math.floor(($("#view").clientWidth - 44 + 12) / 108));
 const rows2 = (list) => `<div class="grid">${list.slice(0, cols() * 2).map(card).join("")}</div>`;
 const gridSk = (n) => `<div class="grid">${Array.from({ length: n }, () => `<div><div class="p sk" style="aspect-ratio:2/3;border-radius:9px"></div><div class="skt sk"></div></div>`).join("")}</div>`;
@@ -17,13 +17,13 @@ const skeleton = () => `<div class="hero"><div class="slide sk"></div><div class
 const status = (d) => { $("#status").textContent = d?.offline ? "Offline · showing saved titles" : ""; };
 
 function nav() {
-  const main = [["home", "Home", "home"], ["cat:movies", "Movies", "movies"], ["cat:drama", "Series", "drama"], ["luganda", "Luganda", "luganda"], ["tv", "Live TV", "ltv"], ["downloads", "Downloads", "dl"]];
+  const main = [["home", "Home", "home"], ["cat:movies", "Movies", "movies"], ["cat:drama", "Series", "drama"], ["luganda", "Luganda", "luganda"], ["up:luo", "Luo", "luganda"], ["up:teso", "Teso", "luganda"], ["tv", "Live TV", "ltv"], ["downloads", "Downloads", "dl"]];
   const extra = cats.filter((c) => !["movies", "drama"].includes(c.slug)).map((c) => [`cat:${c.slug}`, c.label, c.slug]);
   const b = ([k, l, i]) => `<button data-k="${k}"><img src="${ic(i)}" alt="">${esc(l)}</button>`;
   $("#nav").innerHTML = main.map(b).join("") + (extra.length ? `<h6>CATEGORIES</h6>${extra.map(b).join("")}` : "");
   mark();
 }
-const keyOf = (r) => r.v === "cat" ? `cat:${r.slug}` : r.v;
+const keyOf = (r) => r.v === "cat" ? `cat:${r.slug}` : r.v === "up" ? `up:${r.lang}` : r.v;
 const mark = () => document.querySelectorAll("#nav button").forEach((b) => b.classList.toggle("on", b.dataset.k === keyOf(route)));
 
 function go(r, push = true) {
@@ -40,13 +40,13 @@ async function render() {
   if (r.v === "title") return title(v, r.id);
   if (r.v === "play") return play(v, r);
   if (r.v === "downloads") return downloads(v);
-  const label = r.v === "search" ? `Results for “${esc(r.q)}”` : r.v === "luganda" ? "Luganda" : esc(cats.find((c) => c.slug === r.slug)?.label || "Movies");
+  const label = r.v === "search" ? `Results for “${esc(r.q)}”` : r.v === "luganda" ? "Luganda" : r.v === "up" ? (r.lang === "teso" ? "Teso translated" : "Luo translated") : esc(cats.find((c) => c.slug === r.slug)?.label || "Movies");
   v.innerHTML = `<h3>${label}</h3>${gridSk(cols() * 3)}`;
   let page = 1;
-  const url = (p) => r.v === "search" ? `search?q=${encodeURIComponent(r.q)}` : r.v === "luganda" ? `luganda/movies?page=${p}` : `category/${r.slug}?page=${p}`;
+  const url = (p) => r.v === "search" ? `search?q=${encodeURIComponent(r.q)}` : r.v === "luganda" ? `luganda/movies?page=${p}` : r.v === "up" ? `uploads/${r.lang}` : `category/${r.slug}?page=${p}`;
   const d = await api.api(url(1)); if (route !== r) return; status(d);
   const items = d.items || [];
-  v.innerHTML = `<h3>${label}</h3>${items.length ? `<div class="grid" id="g">${items.map(card).join("")}</div>${r.v !== "search" ? `<button class="more" id="more">Load more</button>` : ""}` : `<div class="empty">Nothing here yet.</div>`}`;
+  v.innerHTML = `<h3>${label}</h3>${items.length ? `<div class="grid" id="g">${items.map(card).join("")}</div>${r.v !== "search" && r.v !== "up" ? `<button class="more" id="more">Load more</button>` : ""}` : `<div class="empty">Nothing here yet.</div>`}`;
   const more = $("#more"); if (more) more.onclick = async () => { more.textContent = "Loading…"; const n = await api.api(url(++page)); $("#g").insertAdjacentHTML("beforeend", (n.items || []).map(card).join("")); more.textContent = (n.items || []).length ? "Load more" : "That's all"; };
 }
 
@@ -61,6 +61,7 @@ async function home(v) {
   const tiles = [["cat:movies", "Movies", "movies"], ["cat:drama", "Series", "drama"], ["luganda", "Luganda", "luganda"], ["cat:animation", "Animation", "animation"], ["cat:love-story", "Romance", "love-story"], ["cat:trending", "Trending", "trending"], ["tv", "Live TV", "ltv"]];
   v.innerHTML = `<div class="hero"><div class="slide big" id="s1"></div><div class="slide side-s" id="s2"></div></div>
   <div class="tiles">${tiles.map(([k, l, i]) => `<button class="tile" data-k="${k}"><img src="${ic(i)}" alt="">${l}</button>`).join("")}</div>
+  <div id="local"></div>
   ${(d.rows || []).filter((x) => x.items?.length).map((x) => `<h3>${esc(x.title)}</h3>${rows2(x.items)}`).join("")}`;
   const paint = (el, i, k, n) => {
     if (!i) return; el.classList.add("fade");
@@ -70,6 +71,8 @@ async function home(v) {
       requestAnimationFrame(() => el.classList.remove("fade"));
     }, 350);
   };
+  Promise.all([["luo", "Luo translated"], ["teso", "Teso translated"]].map(async ([l, t]) => { const r = await api.api(`uploads/${l}`); return r.items?.length ? `<h3>${t} <a data-k="up:${l}">See all ›</a></h3>${rows2(r.items)}` : ""; }))
+    .then((h) => { const el = $("#local"); if (el && route.v === "home") el.innerHTML = h.join(""); });
   let k = 0; const n = slides.length;
   const tick = () => { paint($("#s1"), slides[k % n], k % n, n); timers.push(setTimeout(() => paint($("#s2"), slides[(k + 1) % n]), 2600)); };
   if (n) { tick(); paint($("#s2"), slides[1 % n]); timers.push(setInterval(() => { k++; tick(); }, 8000)); }
@@ -165,17 +168,20 @@ const toast = (t) => { const d = document.createElement("div"); d.className = "t
 const mb = (b) => b > 1e9 ? (b / 1e9).toFixed(2) + " GB" : (b / 1e6).toFixed(0) + " MB";
 let dlList = [];
 function downloads(v) {
-  v.innerHTML = `<h3>Downloads <a>Saved to Videos › Movie max</a></h3>${dlList.length ? `<div class="dlg">${dlList.slice().reverse().map((d) => { const p = d.total ? d.received / d.total * 100 : 0; return `<div class="dli"><div class="dp">${d.poster ? `<img src="${esc(d.poster)}">` : `<img src="ic-movies.png">`}</div><div class="dm"><b>${esc(d.name)}</b><div class="bar"><i style="width:${d.state === "done" ? 100 : p}%"></i></div><small>${d.state === "done" ? "Completed · " + mb(d.total) : d.state === "failed" ? "Failed" : `${d.paused ? "Paused" : "Downloading"} · ${mb(d.received)} of ${d.total ? mb(d.total) : "…"} · ${p.toFixed(0)}%`}</small></div><div class="da">${d.state === "done" ? `<button data-d="open" data-id="${d.id}">Show file</button><button data-d="remove" data-id="${d.id}">✕</button>` : d.state === "failed" ? `<button data-d="remove" data-id="${d.id}">Remove</button>` : `<button data-d="${d.paused ? "resume" : "pause"}" data-id="${d.id}">${d.paused ? "Resume" : "Pause"}</button><button data-d="cancel" data-id="${d.id}">Cancel</button>`}</div></div>`; }).join("")}</div>` : `<div class="boot" style="height:60vh"><div><img src="ic-mascot.png"><p>No downloads yet.<br>Open a title and press Download to choose a quality.</p></div></div>`}`;
+  const act = dlList.some((d) => d.state === "downloading" || d.state === "paused" || d.state === "starting");
+  const eta = (d) => d.speed > 0 && d.total ? Math.ceil((d.total - d.received) / d.speed) : 0;
+  const tm = (s) => s > 3600 ? Math.floor(s / 3600) + "h " + Math.floor(s % 3600 / 60) + "m" : s > 60 ? Math.floor(s / 60) + "m " + (s % 60) + "s" : s + "s";
+  v.innerHTML = `<h3>Downloads <a data-dall="folder">Open Videos › Movie max</a></h3><div class="dltools">${act ? `<button data-dall="pause">Pause all</button><button data-dall="resume">Resume all</button>` : ""}${dlList.some((d) => d.state === "done" || d.state === "failed") ? `<button data-dall="clear">Clear finished</button>` : ""}</div>${dlList.length ? `<div class="dlg">${dlList.slice().reverse().map((d) => { const p = d.total ? d.received / d.total * 100 : 0; return `<div class="dli"><div class="dp">${d.poster ? `<img src="${esc(d.poster)}">` : `<img src="ic-movies.png">`}</div><div class="dm"><b>${esc(d.name)}</b><div class="bar"><i style="width:${d.state === "done" ? 100 : p}%"></i></div><small>${d.state === "done" ? "Completed · " + mb(d.total) : d.state === "failed" ? "Failed" : `${d.paused ? "Paused" : "Downloading"} · ${mb(d.received)} of ${d.total ? mb(d.total) : "…"} · ${p.toFixed(0)}%${!d.paused && d.speed ? ` · ${mb(d.speed)}/s · ${tm(eta(d))} left` : ""}`}</small></div><div class="da">${d.state === "done" ? `<button data-d="open" data-id="${d.id}">Show file</button><button data-d="delete" data-id="${d.id}" title="Delete file">🗑</button><button data-d="remove" data-id="${d.id}" title="Remove from list">✕</button>` : d.state === "failed" ? `<button data-d="retry" data-id="${d.id}">Retry</button><button data-d="remove" data-id="${d.id}">Remove</button>` : `<button data-d="${d.paused ? "resume" : "pause"}" data-id="${d.id}">${d.paused ? "Resume" : "Pause"}</button><button data-d="cancel" data-id="${d.id}">Cancel</button>`}</div></div>`; }).join("")}</div>` : `<div class="boot" style="height:60vh"><div><img src="ic-mascot.png"><p>No downloads yet.<br>Open a title and press Download to choose a quality.</p></div></div>`}`;
 }
 api.onDl?.((l) => { dlList = l; if (route.v === "downloads") downloads($("#view")); });
 api.dlList?.().then((l) => dlList = l || []);
-document.addEventListener("click", (e) => { const b = e.target.closest("[data-d]"); if (b) api.dlAct(+b.dataset.id, b.dataset.d); });
+document.addEventListener("click", (e) => { const b = e.target.closest("[data-d]"); if (b) api.dlAct(+b.dataset.id, b.dataset.d); const a = e.target.closest("[data-dall]")?.dataset.dall; if (a) a === "folder" ? api.dlFolder?.() : api.dlAll?.(a); });
 
 let acc = { user: null, subscribed: !window.mm };
 const gate = () => { if (acc.subscribed) return true; account(acc.user ? "plans" : "login"); return false; };
 function paintMe() {
   const u = acc.user, me = $("#me");
-  me.innerHTML = `<span class="av">${u?.photo ? `<img src="${esc(u.photo)}">` : ""}</span><div><b>${u ? esc(u.name || u.email || "My account") : "Click to log in"}</b><small>${u ? (acc.subscribed ? `<em class="vip">VIP</em> ${esc(acc.plan || "Active")}` : "Free · Subscribe") : "Plans · Subscription"}</small></div>`;
+  me.innerHTML = `<span class="av">${u?.photo ? `<img src="${esc(u.photo)}">` : ""}</span><div><b>${u ? esc(u.name || u.email || "My account") : "Click to log in"}</b><small>${u ? (acc.admin ? `<em class="vip">ADMIN</em> Full access` : acc.subscribed ? `<em class="vip">VIP</em> ${esc(acc.plan || "Active")}` : "Free · Subscribe") : "Plans · Subscription"}</small></div>`;
 }
 async function loadAcc() { if (!api.account) return; acc = await api.account(); paintMe(); }
 api.onAccount?.(loadAcc);
@@ -183,20 +189,20 @@ function account(which) {
   const m = document.createElement("div"); m.className = "modal"; const u = acc.user;
   const exp = acc.expires ? new Date(acc.expires).toLocaleDateString() : "";
   m.innerHTML = u && which !== "plans" ? `<div class="acc"><span class="av big">${u.photo ? `<img src="${esc(u.photo)}">` : ""}</span><h2>${esc(u.name || "My account")}</h2><p>${esc(u.email || "")}</p>
-  <div class="plan ${acc.subscribed ? "on" : ""}"><b>${acc.subscribed ? "♛ " + esc(acc.plan || "VIP") : "Free account"}</b><small>${acc.subscribed ? (exp ? "Active until " + exp : "Active") : "Subscribe to watch and download"}</small></div>
+  <div class="plan ${acc.subscribed ? "on" : ""}"><b>${acc.admin ? "★ Admin · full access" : acc.subscribed ? "♛ " + esc(acc.plan || "VIP") : "Free account"}</b><small>${acc.subscribed ? (exp ? "Active until " + exp : "Active") : "Subscribe to watch and download"}</small></div>
   <button class="pri" data-a="plans">${acc.subscribed ? "Renew or upgrade" : "Subscribe now"}</button><button class="sec" data-a="refresh">Refresh status</button><button class="sec" data-a="logout">Log out</button></div>`
   : `<div class="acc"><img src="ic-mascot.png" alt=""><h2>${which === "plans" ? "Go Premium" : "Welcome to Movie max"}</h2><p>${which === "plans" ? "Subscribe to watch and download every title." : "Log in to watch with your Movie max subscription."}</p>
   <ul><li>Full HD movies and series</li><li>Latest Luganda translations</li><li>Downloads to your computer</li></ul>
   <button class="pri" data-a="${which === "plans" ? "plans" : "login"}">${which === "plans" ? "See plans" : "Log in / Sign up"}</button>${which === "plans" && u ? `<button class="sec" data-a="refresh">I've paid · refresh</button>` : ""}<button class="sec" data-a="close">Not now</button></div>`;
   m.onclick = async (e) => { const a = e.target.dataset.a;
-    if (a === "login") return (m.remove(), loginFloat()); if (a === "plans") api.login("/plans");
+    if (a === "login") return (m.remove(), loginFloat()); if (a === "plans") { m.remove(); return acc.user ? plansFloat() : loginFloat(); }
     if (a === "logout") { await api.logout?.(); acc = { user: null, subscribed: false }; paintMe(); }
     if (a === "refresh") { e.target.textContent = "Checking…"; await loadAcc(); toast(acc.subscribed ? "Subscription active" : "No active subscription yet"); }
     if (a || e.target === m) m.remove(); };
   document.body.append(m);
 }
 
-document.addEventListener("click", (e) => { const b = e.target.closest("[data-d]"); if (b) api.dlAct(+b.dataset.id, b.dataset.d); });
+
 
 
 document.addEventListener("click", (e) => {
@@ -207,7 +213,8 @@ document.addEventListener("click", (e) => {
   const t = e.target.closest("[data-k],[data-t],[data-se],[data-play],[data-acc]"); if (!t) return;
   if (route.v === "title" && $("#view").onclick2?.(t)) return;
   if (t.dataset.acc) return account(t.dataset.acc);
-  if (t.dataset.k) { const k = t.dataset.k; hist = []; return go(k.startsWith("cat:") ? { v: "cat", slug: k.slice(4) } : { v: k }, false); }
+  if (t.dataset.k) { const k = t.dataset.k; hist = []; return go(k.startsWith("cat:") ? { v: "cat", slug: k.slice(4) } : k.startsWith("up:") ? { v: "up", lang: k.slice(3) } : { v: k }, false); }
+  if (t.dataset.dir) return gate() && go({ v: "play", direct: t.dataset.dir, title: t.dataset.nm, id: t.dataset.t });
   if (t.dataset.t) go({ v: "title", id: t.dataset.t });
 });
 $("#back").onclick = () => hist.length && go(hist.pop(), false);
@@ -252,3 +259,30 @@ function loginFloat(mode = "in") {
   document.body.append(m); f.email.focus();
 }
 api.onClock?.(() => toast("Your computer's date and time look wrong. Movie max still works, but please fix the clock in Windows settings."));
+
+// In-app plans and mobile money checkout (no website).
+const ugx = (n) => "UGX " + Number(n).toLocaleString();
+async function plansFloat() {
+  const m = document.createElement("div"); m.className = "modal";
+  m.innerHTML = `<div class="acc pl"><h2>Choose a plan</h2><p>Loading plans…</p></div>`; document.body.append(m);
+  const d = await api.api("plans"); const P = d.plans || { vip: [], svip: [] };
+  const list = [...(P.vip || []).map((x) => ({ ...x, tier: "vip" })), ...(P.svip || []).map((x) => ({ ...x, tier: "svip" }))];
+  let pick = list.find((x) => x.id === "monthly") || list[0];
+  const paint = () => { m.innerHTML = `<form class="acc pl"><h2>Go Premium</h2><p>Pay with mobile money · MTN or Airtel</p>
+    <div class="plg">${list.map((x, n) => `<button type="button" class="pli ${x === pick ? "on" : ""} ${x.tier}" data-p="${n}"><small>${x.tier === "svip" ? "SVIP" : "VIP"}</small><b>${esc(x.name)}</b><strong>${ugx(x.price)}</strong><i>${esc(x.note || x.days + " days")}</i></button>`).join("")}</div>
+    <input name="phone" required inputmode="tel" placeholder="Mobile money number e.g. 0772 123456" autocomplete="tel">
+    <small class="err"></small><button class="pri" type="submit">Pay ${pick ? ugx(pick.price) : ""}</button><button class="sec" type="button" data-a="close">Cancel</button></form>`;
+    const f = m.querySelector("form"), err = m.querySelector(".err");
+    f.onclick = (e) => { const b = e.target.closest("[data-p]"); if (b) { const ph = f.phone.value; pick = list[+b.dataset.p]; paint(); m.querySelector("input").value = ph; } if (e.target.dataset.a) m.remove(); };
+    f.onsubmit = async (e) => { e.preventDefault(); const b = f.querySelector(".pri"); b.disabled = true; b.textContent = "Starting payment…"; err.textContent = "";
+      const r = await api.pay({ plan: pick, tier: pick.tier, phone: f.phone.value.trim() });
+      if (r.status !== "pending") { b.disabled = false; b.textContent = "Pay " + ugx(pick.price); err.textContent = r.message || "Payment failed"; return; }
+      m.innerHTML = `<div class="acc pl"><img src="ic-mascot.png" alt=""><h2>Approve on your phone</h2><p>Enter your mobile money PIN to pay ${ugx(pick.price)} for ${esc(pick.name)}.</p><small class="err">Waiting for confirmation…</small><button class="sec" data-a="close">Close</button></div>`;
+      m.querySelector("[data-a]").onclick = () => m.remove();
+      for (let i = 0; i < 60 && m.isConnected; i++) { await new Promise((ok) => setTimeout(ok, 5000));
+        const s = await api.payStatus(r.id);
+        if (s.status === "success") { await loadAcc(); m.remove(); toast("Payment received · subscription active"); return; }
+        if (s.status === "failed") { m.querySelector(".err").textContent = s.message || "Payment failed"; return; } } };
+  };
+  paint();
+}

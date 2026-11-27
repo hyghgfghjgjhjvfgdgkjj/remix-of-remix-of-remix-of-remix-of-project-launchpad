@@ -55,6 +55,50 @@ ipcMain.handle("api", async (_e, p) => {
   return c ? { ...c, offline: true } : { offline: true };
 });
 
+const FS = "https://firestore.googleapis.com/v1/projects/luo-film-2026/databases/(default)/documents";
+const ADMIN_EMAILS = ["mainplatform.nexus@gmail.com", "p0760734679@luofilm.site"];
+let idToken = null;
+const fsVal = (v) => v === null || v === undefined ? { nullValue: null } : typeof v === "number" ? (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v }) : typeof v === "boolean" ? { booleanValue: v } : { stringValue: String(v) };
+async function fsWrite(coll, id, obj, update) {
+  const fields = Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, fsVal(v)]));
+  const url = update ? `${FS}/${coll}/${id}?${Object.keys(obj).map((k) => "updateMask.fieldPaths=" + k).join("&")}` : `${FS}/${coll}?documentId=${id}`;
+  const r = await net.fetch(url, { method: update ? "PATCH" : "POST", headers: { authorization: `Bearer ${idToken.token}`, "content-type": "application/json" }, body: JSON.stringify({ fields }), signal: timeout(12000) });
+  if (!r.ok) throw new Error("save failed " + r.status);
+}
+// In-app mobile money: transaction + subscription rows written with the user's own Firebase token, deposit via the site's pawaPay endpoint.
+ipcMain.handle("pay", async (_e, o) => {
+  const st = await account(); if (!st.user || !idToken) return { status: "failed", message: "Log in first" };
+  const plan = o?.plan || {}; const price = Number(plan.price); if (!(price > 0) || !plan.id) return { status: "failed", message: "Pick a plan" };
+  const id = require("node:crypto").randomUUID(); const now = new Date().toISOString();
+  const tx = { id, user_id: st.user.uid, plan_id: String(plan.id), plan_name: String(plan.name || plan.id), tier: String(o.tier || "vip"), duration_days: Number(plan.days) || 30, device_limit: Number(plan.devices) || 1, amount: price, base_amount: price, currency: "UGX", country: "UG", kind: "payment", status: "pending", method: "mobile_money", reference: `LUO-${Date.now()}-${id.slice(0, 8)}`, note: `Subscription — ${plan.name}`, source: "desktop", created_at: now };
+  try {
+    await fsWrite("luo_transactions", id, tx);
+    const s = await activeSite();
+    const r = await (await net.fetch(`${s}/api/public/desktop/pay`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ phone: o.phone, amount: price, reference: tx.reference, description: tx.note }), signal: timeout(30000) })).json();
+    if (!r.internal_reference) { await fsWrite("luo_transactions", id, { status: "failed" }, true).catch(() => {}); return { status: "failed", message: r.message || "Payment did not start" }; }
+    const phone = String(o.phone).replace(/\D/g, "");
+    await fsWrite("luo_transactions", id, { internal_reference: r.internal_reference, msisdn: phone, phone, used_at: now }, true).catch(() => {});
+    payments.set(id, { tx, dep: r.internal_reference, site: s });
+    return { status: "pending", id, message: r.message || "Approve the prompt on your phone" };
+  } catch { return { status: "failed", message: "Could not reach the payment service" }; }
+});
+const payments = new Map();
+ipcMain.handle("pay-status", async (_e, id) => {
+  const p = payments.get(id); if (!p) return { status: "failed", message: "Unknown payment" };
+  try {
+    const r = await (await net.fetch(`${p.site}/api/public/desktop/pay-status/${p.dep}`, { signal: timeout(15000) })).json();
+    if (r.status === "success" && !p.done) {
+      p.done = true; await account(); const now = new Date().toISOString();
+      const cur = readJson("sub.json", null); const base = cur?.subscribed && cur.expires && Date.parse(cur.expires) > Date.now() ? Date.parse(cur.expires) : Date.now();
+      const t = p.tx; const sid = require("node:crypto").randomUUID();
+      await fsWrite("luo_transactions", id, { status: "completed", completed_at: now }, true).catch(() => {});
+      await fsWrite("luo_subscriptions", sid, { id: sid, user_id: t.user_id, transaction_id: id, plan_id: t.plan_id, plan_name: t.plan_name, tier: t.tier, device_limit: t.device_limit, amount: t.amount, currency: "UGX", status: "active", starts_at: now, started_at: now, expires_at: new Date(base + t.duration_days * 864e5).toISOString(), source: "desktop", created_at: now });
+      notifyAccount();
+    } else if (r.status === "failed") await fsWrite("luo_transactions", id, { status: "failed" }, true).catch(() => {});
+    return r;
+  } catch { return { status: "pending", message: "Waiting for confirmation" }; }
+});
+
 const FB_KEY = "AIzaSyBTSFk7GSITIHQ9WxSdi1BoVvcr4FXuZe0";
 const READ_USER = `new Promise((ok) => { const r = indexedDB.open("firebaseLocalStorageDb"); r.onerror = () => ok(null);
   r.onsuccess = () => { try { const q = r.result.transaction("firebaseLocalStorage").objectStore("firebaseLocalStorage").getAll();
@@ -70,12 +114,18 @@ async function account() {
     if (t.refresh_token && t.refresh_token !== acc.refreshToken) fs.writeFileSync(file("account.json"), JSON.stringify({ ...acc, refreshToken: t.refresh_token }));
     const rows = await (await net.fetch("https://firestore.googleapis.com/v1/projects/luo-film-2026/databases/(default)/documents:runQuery", { method: "POST", headers: { authorization: `Bearer ${t.id_token}`, "content-type": "application/json" }, signal: timeout(10000),
       body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "luo_subscriptions" }], where: { fieldFilter: { field: { fieldPath: "user_id" }, op: "EQUAL", value: { stringValue: acc.uid } } } } }) })).json();
+    idToken = { uid: acc.uid, token: t.id_token, at: Date.now() };
     const val = (f) => f && (f.stringValue ?? f.timestampValue ?? f.integerValue ?? f.doubleValue);
+    const em = String(acc.email || "").toLowerCase();
+    let admin = ADMIN_EMAILS.includes(em);
+    if (!admin) { try { const rr = await (await net.fetch(FS + ":runQuery", { method: "POST", headers: { authorization: `Bearer ${t.id_token}`, "content-type": "application/json" }, signal: timeout(8000),
+      body: JSON.stringify({ structuredQuery: { from: [{ collectionId: "user_roles" }], where: { fieldFilter: { field: { fieldPath: "user_id" }, op: "EQUAL", value: { stringValue: acc.uid } } } } }) })).json();
+      admin = (Array.isArray(rr) ? rr : []).some((r) => ["admin", "staff"].includes(r.document?.fields?.role?.stringValue)); } catch {} }
     const live = (Array.isArray(rows) ? rows : []).map((r) => r.document?.fields).filter(Boolean)
       .map((f) => ({ status: String(val(f.status) || "").toLowerCase(), expires: val(f.expires_at), plan: val(f.plan_name) }))
       .filter((x) => x.status === "active" && (!x.expires || Date.parse(x.expires) > Date.now()))
       .sort((a, b) => Date.parse(b.expires || 0) - Date.parse(a.expires || 0))[0];
-    const out = { user, subscribed: !!live, plan: live?.plan || null, expires: live?.expires || null };
+    const out = { user, admin, subscribed: !!live || admin, plan: live?.plan || null, expires: live?.expires || null };
     fs.writeFileSync(file("sub.json"), JSON.stringify(out)); return out;
   } catch { const c = readJson("sub.json", null); return c && c.user?.uid === acc.uid ? { ...c, offline: true } : { user, subscribed: false }; }
 }
@@ -118,20 +168,24 @@ ipcMain.handle("login", async (e, p) => {
 });
 
 const dls = new Map(); let dlSeq = 0;
-const dlInfo = () => [...dls.values()].map(({ item, ...d }) => ({ ...d, received: item?.getReceivedBytes() ?? d.received, total: item?.getTotalBytes() || d.total, paused: item?.isPaused() ?? false }));
+const dlInfo = () => [...dls.values()].map(({ item, last, ...d }) => ({ ...d, received: item?.getReceivedBytes() ?? d.received, total: item?.getTotalBytes() || d.total, paused: item?.isPaused() ?? false }));
 const pushDl = () => BrowserWindow.getAllWindows().forEach((w) => w.webContents.send("dl", dlInfo()));
 ipcMain.handle("dl-start", (e, { url, name, poster }) => {
   if (!/^https:\/\//.test(url) && !/^http:\/\/localhost/.test(url)) return;
-  const id = ++dlSeq; dls.set(id, { id, name, poster, state: "starting", received: 0, total: 0 });
+  const id = ++dlSeq; dls.set(id, { id, name, poster, url, state: "starting", received: 0, total: 0, speed: 0 });
   pendingDl.push(id); e.sender.downloadURL(url); pushDl();
 });
 const pendingDl = [];
 ipcMain.handle("dl-list", () => dlInfo());
+ipcMain.handle("dl-all", (_e, a) => { for (const d of dls.values()) { if (a === "pause") d.item?.pause(); if (a === "resume" && d.item?.canResume()) d.item.resume(); if (a === "clear" && (d.state === "done" || d.state === "failed")) dls.delete(d.id); } pushDl(); });
+ipcMain.handle("dl-folder", () => { const dir = path.join(app.getPath("videos"), "Movie max"); fs.mkdirSync(dir, { recursive: true }); shell.openPath(dir); });
 ipcMain.handle("dl-act", (_e, { id, a }) => {
   const d = dls.get(id); if (!d) return;
   if (a === "pause") d.item?.pause(); else if (a === "resume") d.item?.canResume() && d.item.resume();
   else if (a === "cancel") { d.item?.cancel(); dls.delete(id); } else if (a === "open" && d.path) shell.showItemInFolder(d.path);
   else if (a === "remove") dls.delete(id);
+  else if (a === "delete") { if (d.path) fs.rmSync(d.path, { force: true }); dls.delete(id); }
+  else if (a === "retry" && d.url) { Object.assign(d, { state: "starting", received: 0, total: 0, speed: 0 }); pendingDl.push(id); BrowserWindow.getAllWindows()[0]?.webContents.downloadURL(d.url); }
   pushDl();
 });
 // A wrong PC clock makes valid certificates look expired; accept only that error, only for our own services, and tell the user once.
@@ -148,7 +202,7 @@ app.whenReady().then(() => require("electron").session.defaultSession.on("will-d
   const id = pendingDl.shift(); const d = id && dls.get(id); if (!d) return;
   const dir = path.join(app.getPath("videos"), "Movie max"); fs.mkdirSync(dir, { recursive: true });
   d.path = path.join(dir, item.getFilename()); item.setSavePath(d.path); d.item = item; d.state = "downloading";
-  let t = 0; item.on("updated", (_ev, st) => { d.state = st === "interrupted" ? "paused" : "downloading"; if (Date.now() - t > 700) { t = Date.now(); pushDl(); } });
+  let t = 0; item.on("updated", (_ev, st) => { d.state = st === "interrupted" ? "paused" : "downloading"; const now = Date.now(); if (now - t > 700) { const b = item.getReceivedBytes(); d.speed = d.last ? Math.max(0, (b - d.last.b) / ((now - d.last.t) / 1000)) : 0; d.last = { b, t: now }; t = now; pushDl(); } });
   item.once("done", (_ev, st) => { d.received = item.getReceivedBytes(); d.total = item.getTotalBytes(); d.item = null; d.state = st === "completed" ? "done" : "failed"; pushDl(); });
 }));
 

@@ -123,3 +123,10 @@ input,textarea{user-select:text}
 .acc.lg .or{display:flex;align-items:center;gap:8px;color:var(--mut);font-size:11px;width:100%}.acc.lg .or::before,.acc.lg .or::after{content:"";flex:1;height:1px;background:#ffffff1a}
 .acc.lg .gg b{color:#4285f4;margin-right:6px}.acc.lg .lnk{background:none;border:0;color:#22d3ee;cursor:pointer;font-size:12px}
 .acc.lg input{display:block;margin-top:8px}.acc.lg .err{display:block;margin-top:6px}
+
+.dltools{display:flex;gap:8px;margin:-4px 0 12px}.dltools button{background:#1b1e27;color:#dfe3ee;border:1px solid #2a2e3a;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}
+h3 a[data-k],h3 a[data-dall]{cursor:pointer}
+.acc.pl{width:min(620px,92vw)}.plg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.pli{display:flex;flex-direction:column;gap:3px;text-align:left;background:#161922;border:1.5px solid #2a2e3a;border-radius:12px;padding:10px;color:#e8ebf3;cursor:pointer}
+.pli small{font-size:10px;font-weight:800;color:#f5c451}.pli.svip small{color:#c79bff}.pli strong{font-size:15px;color:#fff}.pli i{font-style:normal;font-size:11px;color:#8b91a1}
+.pli.on{border-color:#f5c451;background:#221d10}
